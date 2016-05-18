@@ -13,7 +13,7 @@ def main():
 		for ch in range(0, len(tarr)):
 			if tarr[ch] == ' ':
 				rand[ch] = ' '
-			if tarr[ch] != rand[ch]:
+			elif tarr[ch] != rand[ch]:
 				rand[ch] = choice(string.ascii_letters)
 		print(''.join(rand))
 	print("Iterations taken: ", iterations)
