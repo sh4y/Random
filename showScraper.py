@@ -19,7 +19,7 @@ def extractLink(string):
 def greatestIndex(lst):
     m = 0
     for i in range(0, len(lst)):
-        if lst[i] > lst[m]:
+        if lst[i] >= lst[m]:
             m = i
     return m
 
