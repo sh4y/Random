@@ -3,13 +3,22 @@ Just a bunch of random programs
 
 Contents:
 
-1) Evolution of Text (May 18, 2016):
+1) Evolution of Text (May 18, 2016) evo.py :
 Given a sentence "XXX XXX", creates a random sentence of the same length.
 Changes every character until said character matches original character, at this point, character does not change.
 Repeats until both sentences match, says how many iterations it took.
 
-2) Primewire Episode Tracker (May 22, 2016)
+2) Primewire Episode Tracker (May 22, 2016) showScraper.py :
 Given a list of shows (Primewire links) in a textfile "shows.txt", this program will either list all the episodes or list the latest episode (depending on the configuration). Note that I do not condone illegal activities of any form, and this program is for research and learning purposes only. 
+
+3) Stock Backtesting Framework (June 7, 2017) Source.cpp :
+Just a couple functions that explore regressions, volatility, and profitability of random trading strategies of stocks.
+
+
+
+
+
+
 
 "shows.txt" example:
 
