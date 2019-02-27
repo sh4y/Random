@@ -1,0 +1,565 @@
+program Superheater;
+  {$DEFINE SMART}
+  {$I SRL-6/SRL.Simba}
+  {$I Socks.Simba}
+
+const
+
+  Version = 1.00;
+
+  //Superheating Information
+
+  BAR_TYPE        = 'Rune';     //'Iron', 'Steel', 'Gold', 'Mithril', 'Adamant', 'Rune'
+  COAL_BAG        = true;  //Using coal bag? (true/false) -- In development
+  CAST_SLOT       = '3';     //Cast slot on your action bar - Ex: 'R', '1', '2'...
+  BANK_PRESET     = '1';     //'1' or '2'
+  BANK_TYPE       = BANK_CHEST_Lumbridge; //Highly recommend Shantay Pass w100
+  WORLD_100       = true;   //Set to true if you want the script to login to w100 (set as one of your fav worlds)
+  FAV_WORLD       = 2;    //which of your favorite worlds is w100
+  BARS_MAKE       = 12500;   //How many bars to make before stopping?
+  //Misc/Extra Information
+
+  SHOW_DEBUG      = false;    //do you   to see the debug of EVERY single action?
+  SMART_PAINT     = false;     //do you want a live paint?
+  EMAIL_ALERTS    = true;     //Gmail preferably, start a new account
+
+  //Ignore Rest if EMAIL_ALERTS is false!
+
+  EMAIL_USERNAME  = '';
+  EMAIL_PASSWORD  = '';
+  EMAIL_SEND      = ''; //The email that you want to receive the text about
+  EMAIL_FREQUENCY = 1;  //In hours
+
+procedure declarePlayers;
+begin
+  currentPlayer := 0;
+  with players[0] do
+  begin
+    //Account Information
+    isActive         := true;
+    loginName        := '';
+    password         := '';
+    bankPin          := '';
+  end;
+end;
+
+function getItemPrice(itemString: string; priceType: integer): integer;
+var
+  wikiaPage, priceString: string;
+begin
+  wikiaPage := getPage('http://runescape.wikia.com/wiki/Exchange:' + itemString);
+  case priceType of
+    1: priceString := between('GEPrice">', '</span>', wikiaPage);
+    2: priceString := between('<b>Low Alchemy:</b> ', '</li>', wikiaPage);
+    3: priceString := between('<b>High Alchemy:</b> ', '</li>', wikiaPage);
+  end;
+  result := strToIntDef(ExtractFromStr(priceString, numbers), -1);
+end;
+
+type
+  Bar = record
+    barType, oreType:String;
+    barXP, coalReq:Integer;
+    maxCasts, profit:Integer;
+end;
+
+var
+  Bars:array of Bar;
+  _chosenBar:Bar;
+
+
+function getMaxCastsInv(coalAmt:Integer):Integer;
+var
+  i, total:Integer;
+  j,d:integer;
+begin
+  if coal_bag then d := 108 else d := 27;
+  for i := 1 to 27 do
+  begin
+    total := total + i + coalAmt;
+    if i > 1 then
+      total := total - j;
+    Inc(j, 1);
+    if total >= d then
+      Result := i-1;
+    if Result > 0 then
+      break;
+  end;
+end;
+
+function getProfitBar(oreName, barName:String; coalAmt:Integer):integer;
+var
+  orePrice, barPrice, natPrice:Integer;
+begin
+  orePrice := getItemPrice(oreName, 1);
+  barPrice := getItemPrice(barName, 1);
+  natPrice := getitemPrice('Nature_rune', 1);
+  Result := barPrice - orePrice - natPrice - (coalAmt * getItemPrice('Coal', 1));
+end;
+
+procedure setupBars(bType:String);
+var
+  barNames, oreNames:TStringArray;
+  barXPs, coalReqs:TIntegerArray;
+  profits:TIntegerArray;
+  i,j:integer;
+begin
+  oreNames := ['Iron_ore', 'Iron_ore', 'Silver_ore', 'Gold_ore', 'Mithril_ore', 'Adamant_ore', 'Runite_ore'];
+  barNames := ['Iron_bar', 'Steel_bar', 'Silver_bar', 'Gold_bar', 'Mithril_bar', 'Adamant_bar', 'Rune_bar'];
+  barXPs := [13, 18, 14, 23, 30, 38, 50];
+  coalReqs := [0, 2, 0, 0, 4, 6, 8];
+
+  setLength(Bars, 7);
+
+  writeln('Loading variables, hang on - this might take a while!');
+
+  for i := 0 to High(Bars) do
+  begin
+    Bars[i].barType   := barNames[i];
+    Bars[i].oreType   := oreNames[i];
+    Bars[i].barXP     := barXPs[i];
+    Bars[i].coalReq   := coalReqs[i];
+    Bars[i].maxCasts  := getMaxCastsInv(coalReqs[i]);
+    //Bars[i].profit    := getProfitBar(oreNames[i], barNames[i], coalreqs[i]);
+  end;
+
+  case bType of
+    'Iron'    :  j:=0;
+    'Steel'   :  j:=1;
+    'Silver'  :  j:=2;
+    'Gold'    :  j:=3;
+    'Mithril' :  j:=4;
+    'Adamant' :  j:=5;
+    'Rune'    :  j:=6;
+  end;
+
+  _chosenBar := Bars[j];
+  _chosenBar.profit := getProfitBar(oreNames[j], barNames[j], coalreqs[j]);
+
+  if _chosenBar.coalReq = 0 then
+    _chosenBar.maxCasts := 27;
+
+  writeln('Successfully loaded variables, starting script!');
+  writeln('Casting on: ' + _chosenBar.oreType);
+  writeln('Max casts: ' + ToStr(_chosenBar.maxCasts));
+  writeln('Coal required: ' + ToStr(_chosenBar.coalReq));
+  writeln('Profit per bar: ' + ToStr(_chosenBar.profit));
+end;
+
+
+{*
+TRSBankScreen.__openChest
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: pascal
+
+    function TRSBankScreen.__openChest(bankType: integer): boolean;
+
+Internal function that attemps to open the bank chest at bankType.
+
+.. note::
+
+    - by Olly
+    - Last Updated: 08 January 2013 by Ashaman88
+
+Example:
+
+.. code-block:: pascal
+
+    bankScreen.__openChest();
+*}
+{$IFNDEF CODEINSIGHT}
+function TRSBankScreen.__openChest(bankType: integer): boolean;
+var
+  col1Edges, col2Edges, goodEdge, tpa: TPointArray;
+  atpa, atpaFiltered: T2DPointArray;
+  i, j, len, wid, hei, avelen: integer;
+  col1: TColorData;
+  col2: TColorData;
+  ibox,bbox:TBox;
+begin
+  result := false;
+
+  case bankType of
+    BANK_CHEST_SW: begin col1:= [8946555, 15, [2, [0.18, 0.18, 0.00]]]; col2:= [5863053, 10, [2, [0.13, 0.10, 0.00]]]; avelen:= 90; end;
+    BANK_CHEST_SHANTAY: begin col1:= [4335674, 6, [2, [0.38, 1.96, 0.00]]]; col2:= [7247287, 6, [2, [0.16, 1.41, 0.00]]]; avelen:= 90; end;
+    BANK_CHEST_DUEL: begin col1:= [11512192, 18, [2, [0.39, 0.57, 0.00]]]; col2:= [6586289, 10, [2, [0.21, 1.00, 0.00]]]; avelen:= 90; end;
+    BANK_CHEST_CW: begin col1:= [8088922, 16, [2, [0.06, 0.17, 0.00]]]; col2:= [4808312, 17, [2, [0.03, 0.17, 0.00]]]; avelen:= 90; end;
+    BANK_CHEST_GROTTO: begin col1:= [6842737, 6, [2, [0.31, 0.08, 0.00]]]; col2:= [2570316, 4, [2, [0.15, 1.35, 0.00]]]; avelen:= 90; end;
+    BANK_CHEST_LUMBRIDGE: begin col1:= [11313299, 10, [2, [0.17, 0.42, 0.00]]]; col2:= [6586289, 10, [2, [0.21, 1.00, 0.00]]]; avelen:= 90; end;
+    BANK_TABLE_BURTHORPE: begin col1:= [14547176, 8, [2, [1.24, 4.52, 0.00]]]; col2:= [6460329, 11, [2, [0.11, 1.29, 0.00]]]; avelen:= 90; end;
+  end;
+
+  print('TRSBankscreen.__openChest()', TDebug.HEADER);
+
+  if (col1.gatherIn(tpa, mainScreen.getBounds())) then
+    col1Edges := findTPAEdges(tpa);
+
+  if (col2.gatherIn(tpa, mainScreen.getBounds())) then
+    col2Edges := findTPAEdges(tpa);
+
+  len := length(col1Edges);
+
+  if (len < 5) or (length(col2Edges) < 5) then
+  begin
+    print('Failed to find enough chest colors [1 '+toStr(len)+', 2 '+toStr(length(col2Edges))+' ]', TDebug.ERROR);
+    print('TRSBankscreen.__openChest(): result = false', TDebug.FOOTER);
+    exit(false);
+  end;
+
+  setLength(goodEdge, len * length(col2Edges));
+  j := 0;
+
+  for i := 0 to (len - 1) do
+    if (nearbyPointInArrayEx(col1Edges[i], 1, 1, col2Edges)) then
+    begin
+      goodEdge[j] := col1Edges[i];
+      inc(j);
+    end;
+
+  setLength(goodEdge, j);
+
+  if (j < 5) then
+  begin
+    print('Failed to find enough good bank chest edges', TDebug.ERROR);
+    print('TRSBankscreen.__openChest(): result = false', TDebug.FOOTER);
+    exit(false);
+  end;
+
+  atpa := clusterTPAEx(goodEdge, 5, 5);
+
+  for i := 0 to high(atpa) do
+    if (length(atpa[i]) > 5) then
+    begin
+      getTPABounds(atpa[i]).getDimensions(wid, hei);
+
+      if (wid > 3) and (hei > 3) then
+        insert(atpa[i], atpaFiltered);
+    end;
+
+  if (length(atpaFiltered) < 1) then
+  begin
+    print('Failed to find enough good vaild bank chest edges', TDebug.ERROR);
+    print('TRSBankscreen.__openChest(): result = false', TDebug.FOOTER);
+    exit(false);
+  end;
+
+  tpa := mergeATPA(atpaFiltered);
+  atpa := clusterTPAEx(tpa, 10, 10);
+
+  sortATPAFromSize(atpa, avelen, true);
+
+  for i := 0 to high(atpa) do
+  begin
+    if (random(7) = 0) then
+      mouse(atpa[i][random(high(atpa[i]))].randRange(-2, 2))
+    else
+      mouse(atpa[i].getMiddle().randRange(-6, 6));
+
+    if (isMouseOverText(['Open Shantay chest', 'Open S', 'pen Shant', 'n Shantay','Bank Bank', 'ank Banker', 'ank Bank', 'Use Bank', 'Bank chest'])) then
+    begin
+      if random(500) = 1 then
+      begin
+        fastClick(MOUSE_RIGHT);
+        if (not chooseOption.select(['Open Shantay chest', 'Open S', 'pen Shant', 'n Shantay','Bank Bank', 'ank Banker', 'ank Bank', 'Use Bank', 'Bank chest'])) then
+          continue;
+      end else
+        FastClick(MOUSE_LEFT);
+      if not coal_bag then
+      begin
+        ibox := tabBackpack.getSlotBox(_chosenBar.maxCasts+1);
+        bbox := IntToBox(ibox.x1+10, ibox.y1+10, ibox.x2 -10, ibox.y2-10);
+        mouseBox(bbox, MOUSE_MOVE);
+      end;
+      wait(50 + random(100));
+
+      if (minimap.isFlagPresent()) then
+        minimap.waitFlag(randomRange(12, 15));
+
+      result := _waitBankOrPinScreen(randomRange(6000, 8000));
+
+      if (result) then
+      begin
+        print('Succesfully opened the bank');
+        break();
+      end;
+    end;
+  end;
+
+  print('TRSBankscreen.__openChest() result = '+lowercase(boolToStr(result)), TDebug.FOOTER);
+end;
+{$ENDIF}
+
+procedure SetupLogin;
+begin
+  ClearDebug;
+  SMARTEnableDrawing := True;
+  SetupSRL;
+  setLength(players, 1);
+  if not SHOW_DEBUG then
+    disableSRLDebug := true;
+end;
+
+function findLogOutMenu:Boolean;
+var
+  s:String;
+begin
+  s := TesseractGetText(IntToBox(376,463,422,477), FILTER_SMALL_CHARS);
+  Result := Pos('Logout', s);
+  if not Result then
+    Result := Pos('ogo', s);
+end;
+
+function bankIsOpen:Boolean;
+var
+  TPA:TPointArray;
+  t:TPoint;
+begin
+  colorSetting(2, 0.01, 0.61);
+  SetLength(TPA, 0);
+  while length(TPA) = 0 do
+  begin
+    FindColorsSpiralTolerance(T.y,T.y,TPA,307678,IntToBox(225,17,380,30), 7);
+    writeln(Length(TPA));
+  end;
+  Result := Length(TPA) > 20;
+end;
+
+var
+  bankFails, totalBankFails:Integer;
+
+function openBank:Boolean;
+begin
+  Result := false;
+  if bankScreen.open(BANK_TYPE) then
+  begin
+    if (pinScreen.isOpen()) then
+    begin
+      if pinScreen.enter(players[currentPlayer].bankPin) then
+        Result := true;
+      if Result then
+        wait(2500);
+    end;
+    Result := true;
+  end else
+  begin
+    if bankFails > 5 then
+      MouseBox(tabBackpack.getBounds(), MOUSE_MOVE);
+    if random(3) = 1 then mainScreen.setAngle(MS_ANGLE_HIGH);
+    minimap.setAngle(RandomRange(0,359));
+    Inc(bankFails, 1);
+    Inc(totalBankFails, 1);
+  end;
+  if Result then
+    bankFails := 0;
+end;
+
+var
+  myTotalTimeRunning:TTimeMarker
+
+function getPerHour(i:Integer):Integer;
+begin
+  Result := Round(i * (3600000/myTotalTimeRunning.getTime()));
+end;
+
+var
+  barsMade:Integer;
+
+function getCompletionTime():String;
+begin
+  Result := msToTime(Round(((BARS_MAKE-barsMade)/getPerHour(barsMade))*3600000), TIME_FORMAL_LONG);
+end;
+
+function Bank:Boolean;
+var
+  m:TTimeMarker;
+  ibox,bbox:TBox;
+begin
+  if openBank then
+  begin
+    if bankIsOpen() then
+    begin
+      if coal_bag then
+      begin
+        MouseBox(bankScreen.getPackSlotBox(27), MOUSE_RIGHT);
+        chooseOption.select(['Fill C', 'l C'], 500);
+        ibox := tabBackpack.getSlotBox(11);
+        bbox := IntToBox(ibox.x1+10, ibox.y1+10, ibox.x2 -10, ibox.y2-10);
+        SmartImage.drawBox(bbox, false, clAqua);
+        MouseBox(bbox, MOUSE_MOVE);
+      end;
+      TypeSend(BANK_PRESET, false);
+      m.start();
+      while (bankScreen.isOpen) do
+      begin
+        Wait(50 + RandomRange(30,40));
+        if m.getTime() > 3000 then
+          exit;
+      end;
+      m.reset();
+      tabBackpack.waitWhileLocked();
+      Wait(randomRange(800,920));
+      Result := tabBackpack.isFull();
+    end;
+  end;
+end;
+
+procedure switchW100;
+var
+  TBA:TBoxArray;
+begin
+  if players[0].loginToLobby then
+  begin
+    TBA := [IntToBox(577,524,605,534), IntToBox(639,527,669,534), IntToBox(704,527,725,537)];
+    MouseBox(TBA[FAV_WORLD-1], MOUSE_LEFT);
+    repeat
+      wait(RandomRange(1333, 1555));
+    until IsLoggedIn;
+  end;
+end;
+
+procedure castOre;
+var
+  i:Integer;
+begin
+  if bankScreen.isOpen() then
+  begin
+    writeln('castOre: bank is open (Line 411).');
+    TypeSend(CAST_SLOT, false);
+  end;
+  tabBackpack.waitWhileLocked();
+  if not tabBackpack.isFull()  then
+  begin
+    writeln('Shutting down, not enough materials detected!');
+    players[0].logout();
+    TerminateScript;
+  end;
+  if not isMouseOverText(['ore'], 500, True) then
+  begin
+    mouseBox(tabBackpack.getBounds(), MOUSE_MOVE);
+    mouseBox(tabBackpack.getSlotBox(_chosenBar.maxCasts), MOUSE_MOVE);
+  end;
+  for i := 0 to (_chosenBar.maxCasts-1) do
+  begin
+    if findLogOutMenu then
+      typeByte(VK_ESCAPE);
+    TypeSend(CAST_SLOT, false);
+    if IsMouseOverText(['Cast', 'Superheat', 't ->'], 1250) then
+    begin
+      FastClick(MOUSE_LEFT);
+      writeln('Current val: ' + ToStr(i));
+      if not (i = (_chosenBar.maxCasts-1)) then
+        wait(RandomRange(700,850));
+      wait(RandomRange(400,500));
+      Inc(barsMade, 1);
+    end else
+    begin
+      if not IsLoggedIn then
+        exit;
+      i := i - 1;
+      tabBackpack.mouseSlot(_chosenBar.maxCasts, MOUSE_MOVE);
+    end;
+  end;
+end;
+
+function getmyTimeRunning():String;
+begin
+  Result := msToTime(myTotalTimeRunning.getTime(), TIME_FORMAL_LONG);
+end;
+
+procedure progressReport;
+var
+  bph:Integer;
+begin
+  clearDebug;
+  writeln('Time Running: ' + timeRunning);
+  if barsMade > 1 then
+    writeln('Estimated time till completion: ' + getCompletionTime());
+  writeln('Bars made: ' + ToStr(barsMade) + ' (' + ToStr(getPerHour(barsMade)) + ' per hour)');
+  writeln('Profit made: ' + ToStr(barsMade*_chosenBar.profit) + ' (' + ToStr(getPerHour(barsMade)*_chosenBar.profit) + ' per hour)');
+  writeln('Smithing exp gained: ' + ToStr(barsMade*_chosenBar.barXP) + ' (' + ToStr(_chosenBar.barXP*getPerHour(barsMade)) + ' per hour)');
+  writeln('Magic exp gained: ' + ToStr(barsMade*53) + ' (' + toStr(53*getPerHour(barsMade)) + ' per hour)');
+  writeln('Bar type: ' + _chosenBar.barType);
+
+  if SMART_PAINT then
+  begin
+    smartImage.clear();
+    smartImage.drawBitmap('C:\Simba\Scripts\paint.png', Point(0,358));
+    smartImage.drawText('Bars made: ' + ToStr(barsMade) + ' (' + ToStr(getPerHour(barsMade)) + ' per hour)', Point(205,551), clAqua);
+    smartImage.drawText('Profit made: ' + ToStr(barsMade*_chosenBar.profit) + ' (' + ToStr(getPerHour(barsMade)*_chosenBar.profit) + ')', Point(222,575), clAqua);
+    smartImage.drawText(timeRunning, Point(228,477), clAqua);
+    smartImage.drawText('Smithing exp gained: ' + ToStr(barsMade*_chosenBar.barXP) + ' (' + ToStr(_chosenBar.barXP*getPerHour(barsMade)) + ')', Point(257,529), clAqua);
+    smartImage.drawText('Magic exp gained: ' + ToStr(barsMade*53) + ' (' + toStr(53*getPerHour(barsMade)) + ')', Point(246,502), clAqua);
+    smartImage.drawText('Total bank fails: ' + ToStr(totalBankFails), Point(50,50), clRed);
+    if barsMade > 1 then
+      smartImage.drawText('Estimated time till completion: ' + getCompletionTime(), Point(50, 60), clRed);
+  end;
+end;
+
+function outlineExists:Boolean;
+var
+  x,y:integer;
+begin
+  Result := findColor(x,y,16777215,tabBackpack.getBounds());
+end;
+
+function getSelectedSlot:Integer;
+var
+  x,y:integer;
+begin
+  if findColor(x,y,16777215,tabBackpack.getBounds()) then
+    Result := tabBackpack.pointToSlot(Point(x,y));
+end;
+
+procedure getRidofOutline;
+begin
+  if bankFails >  0 then
+    if outlineExists then
+      if tabBackpack.mouseSlot(getSelectedSlot(), MOUSE_LEFT) then
+        barsMade := barsMade - 1;
+end;
+
+procedure mainLoop;
+begin
+            if findLogOutMenu() then
+            TypeByte(vk_ESCAPE);
+  if bankScreen.isOpen() then
+  begin
+  writeln('mainLoop: Bank is open, trying to close (Line 472)');
+    bankScreen.close();
+  end;
+  if Bank then
+    castOre;
+  getRidofOutline;
+  if bankFails > 100 then
+  begin
+    writeln('Failed banking 100 times - Terminating script!');
+    players[0].logout();
+    TerminateScript;
+  end;
+  progressReport;
+end;
+
+procedure logout;
+begin
+  tabBackpack.waitWhileLocked();
+  TypeByte(VK_ESCAPE);
+  if waitFunc(@findLogOutMenu, 500, 10000) then
+    Mouse(Point(393 +- Random(30), 465 +- Random(6)), MOUSE_LEFT);
+end;
+
+var
+  MS:Mail
+procedure composeMessage;
+var
+  s:String;
+begin
+  s :='Time Running: ' + TimeRunning + ', superheated ' + toStr(barsMade) + ' bars for' +
+    ' a total of ' + ToStr(barsMade*103) + ' xp.';
+  MS.Create('smtp.gmail.com', 465, EMAIL_USERNAME, EMAIL_PASSWORD, EMAIL_SEND, 'S1NSuperheater');
+  MS.SetMessage(s);
+  MS.SetFromName('Sin');
+  MS.SetToName('Sin');
+  MS.SendMail;
+  MS.Free;
+end;
