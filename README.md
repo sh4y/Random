@@ -14,9 +14,10 @@ Given a list of shows (Primewire links) in a textfile "shows.txt", this program 
 3) Stock Backtesting Framework (June 7, 2017) Source.cpp :
 Just a couple functions that explore regressions, volatility, and profitability of random trading strategies of stocks.
 
+4) SeamCarving :
+Given an image (ideally, a long image), remove low action scenes. This is helpful in trimming down panoramas as such:
 
-
-
+![Screenshot](https://i.imgur.com/BIZRtdq.png)
 
 
 
