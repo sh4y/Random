@@ -19,6 +19,11 @@ Given an image (ideally, a long image), remove low action scenes. This is helpfu
 
 ![Screenshot](https://i.imgur.com/BIZRtdq.png)
 
+5) Harris Corner Detector:
+Given an image, find the corners as per the Harris algorithm. Note, parameters will have to be tweaked for effectiveness.
+
+![Screenshot](https://i.imgur.com/iFaKR14.png)
+
 
 
 "shows.txt" example:
