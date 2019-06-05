@@ -1,0 +1,46 @@
+import pandas as pd
+import random
+
+RECENT = False
+
+def isNaN(num):
+    return num != num
+
+
+excel_file = r'C:\Users\Shay\Documents\German\Meanings.xlsx'
+df = pd.read_excel(excel_file)
+
+words, meanings = df['Word'], df['Meaning']
+completed_words = {}
+
+for i in range(len(words)-1, -1, -1):
+    if RECENT:
+        if len(completed_words) == 30:
+            break
+    word, meaning = words[i], meanings[i]
+    if not isNaN(meaning):
+        completed_words[word] = meaning
+        
+keys = list(completed_words.keys())
+random.shuffle(keys)
+
+def test():
+    for key in keys:
+        correct = False
+        print("What is the meaning of: " + str(key))
+        while not correct:
+            answer = input()
+            if answer.lower() == (completed_words[key]).lower():
+                print("Correct!")
+                correct = True
+            else:
+                print("Incorrect! Try again!")
+
+def main():
+    test()
+    print("Done all questions! Try again? y/n:")
+    answer = input()
+    if answer == 'y':
+        main()
+
+main()
